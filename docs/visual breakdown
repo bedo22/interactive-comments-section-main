@@ -1,0 +1,23 @@
+┌────────────────────────────────────────────────────────────────┐
+│ THE SERVER (Node.js http) │
+│ ┌──────────────────────────────────────────────────────────┐ │
+│ │ EXPRESS — routing, parsing, generic plumbing │ │
+│ │ ┌────────────────────────────────────────────────────┐ │ │
+│ │ │ YOUR HANDLER (JS) — validation, business rules, │ │ │
+│ │ │ decides WHAT data is needed, composes SQL strings │ │ │
+│ │ │ and dispatches them via the driver │ │ │
+│ │ │ │ │ │
+│ │ │ ┌──────────────────────────────────────────────┐ │ │ │
+│ │ │ │ THE DRIVER (better-sqlite3) — translator. │ │ │ │
+│ │ │ │ Carries SQL to SQLite, carries rows back. │ │ │ │
+│ │ │ │ Neither your code nor the database. │ │ │ │
+│ │ │ └──────────────────────────────────────────────┘ │ │ │
+│ │ └────────────────────────────────────────────────────┘ │ │
+│ └──────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────┘
+│ SQL string travels across the driver
+▼
+┌────────────────────────────────────────────────────────────────┐
+│ SQLITE (separate program) — receives SQL, executes it, │
+│ stores/retrieves rows in comments.db │
+└────────────────────────────────────────────────────────────────┘
