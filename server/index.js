@@ -7,7 +7,13 @@ const PORT = process.env.PORT || 3000;
 
 const db = new Database(DB_PATH);
 runSchema(db);
-seedTestData(db);
+
+// Seed only when the database is empty. Re-seeding an existing DB would either
+// crash on the UNIQUE(username) constraint or silently duplicate data.
+const userCount = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+if (userCount === 0) {
+  seedTestData(db);
+}
 
 const app = createApp(db);
 app.listen(PORT, () => {

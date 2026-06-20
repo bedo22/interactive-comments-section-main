@@ -68,15 +68,10 @@ export function seedTestData(db) {
         db.prepare('SELECT last_insert_rowid() AS id').get().id
       );
 
-      // Seed a few votes to demonstrate the score feature.
-      // Score is derived from SUM(value), so we only add a few distinct votes.
-      if (comment.score && comment.score > 0) {
-        const voters = [...userMap.values()].filter((uid) => uid !== userId);
-        const voteCount = Math.min(comment.score, voters.length);
-        for (let i = 0; i < voteCount; i++) {
-          insertVote.run(voters[i], insertedId, 1);
-        }
-      }
+      // NOTE: the fixture's `score` field is a display artifact, not source of
+      // truth. We deliberately do NOT reproduce it. Score is derived from real
+      // votes via SUM(value) — see ADR-0003. Demo votes are added below, after
+      // the thread is fully inserted, and are explicitly labeled as such.
 
       if (comment.replies) {
         insertThreaded(comment.replies, insertedId);
@@ -85,11 +80,29 @@ export function seedTestData(db) {
   }
 
   insertThreaded(raw.comments);
+
+  // Explicit demonstration votes. These exist only so the score column is
+  // non-trivial on first run; they are NOT an attempt to match the fixture's
+  // cosmetic `score` values. Each is one real user casting one real vote.
+  // (vote per user per comment is enforced by the votes PK.)
+  const amyrobson = userMap.get('amyrobson');
+  const maxblagun = userMap.get('maxblagun');
+  const ramsesmiron = userMap.get('ramsesmiron');
+  if (amyrobson && maxblagun) {
+    insertVote.run(amyrobson, 2, 1);   // amyrobson upvotes comment #2
+  }
+  if (maxblagun && ramsesmiron) {
+    insertVote.run(maxblagun, 3, 1);   // maxblagun upvotes reply #3
+  }
 }
 
 export function createDatabase(filename = ':memory:') {
   const db = new Database(filename);
-  db.pragma('journal_mode = WAL');
+  // WAL only applies to file-backed databases. It is a no-op on :memory: and
+  // better-sqlite3 logs a warning, so gate it to real files.
+  if (filename !== ':memory:') {
+    db.pragma('journal_mode = WAL');
+  }
   return db;
 }
 
