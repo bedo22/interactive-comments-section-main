@@ -44,3 +44,13 @@ DO NOT add the user picker, voting, edit, or delete.
 ACCEPTANCE: `pnpm install && pnpm test` passes all tests including the new
 buildCommentTree tests. `pnpm dev` shows the seeded comments tree rendering
 in the browser at http://localhost:5173. Stop here and report what you built.
+
+Three nits in buildCommentTree.js (non-blocking)
+
+1. Dead code — the "edge case" branches can't fire. Lines 37–41 and 47–50 handle "a reply was seen before its root" / "root not seen yet." But because the input is sorted id ASC (the GET endpoint guarantees it, and we even sort the output at the end), a parent always has a lower id than its child and is always seen first. These branches are defensive code for a situation that's structurally impossible. Not wrong, just dead weight — a future reader will wonder when they trigger (answer: never).
+
+2. parentId === undefined checks are redundant. The API always returns parentId as either a number or null (the toCamelCase in app.js runs on every row). Checking for undefined too is belt-and-suspenders. Harmless.
+
+3. The final .sort((a, b) => a.root.id - b.root.id) (line 55) re-sorts work that was already in order. Since input is id-ASC and roots appear in id-ASC order naturally, the sort is a no-op in practice. The comment even says "shouldn't happen with id-ASC order." It's there to be safe, but it's redundant with the contract.
+
+None of these are bugs. They're over-caution. I'd leave them for now — they don't hurt, and cleaning them up is a nice "refactor" exercise for you later when you understand the code better.

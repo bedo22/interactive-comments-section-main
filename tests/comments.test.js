@@ -107,3 +107,91 @@ describe('GET /comments', () => {
     expect(ids).toContain(1);
   });
 });
+
+describe('POST /comments', () => {
+  it('creates a top-level comment and returns the full row shape', async () => {
+    const res = await request(app)
+      .post('/comments?userId=1')
+      .send({ content: 'A new top-level comment' })
+      .expect(201);
+
+    expect(res.body).toHaveProperty('id');
+    expect(res.body.parentId).toBeNull();
+    expect(res.body.author).toBe('juliusomo');
+    expect(res.body.content).toBe('A new top-level comment');
+    expect(res.body).toHaveProperty('createdAt');
+    expect(res.body.editedAt).toBeNull();
+    expect(res.body.deletedAt).toBeNull();
+    expect(res.body.score).toBe(0);
+    expect(res.body.yourVote).toBeNull();
+    expect(res.body).toHaveProperty('avatar');
+    expect(res.body).toHaveProperty('userId');
+  });
+
+  it('creates a reply and preserves parentId', async () => {
+    const res = await request(app)
+      .post('/comments?userId=2')
+      .send({ content: 'A reply', parentId: 1 })
+      .expect(201);
+
+    expect(res.body.parentId).toBe(1);
+  });
+
+  it('creates a reply to a reply and preserves parentId', async () => {
+    const res = await request(app)
+      .post('/comments?userId=3')
+      .send({ content: 'Deep reply', parentId: 3 })
+      .expect(201);
+
+    expect(res.body.parentId).toBe(3);
+  });
+
+  it('rejects missing userId with 400', async () => {
+    const res = await request(app)
+      .post('/comments')
+      .send({ content: 'No userId' })
+      .expect(400);
+
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('rejects unknown userId with 400', async () => {
+    const res = await request(app)
+      .post('/comments?userId=999')
+      .send({ content: 'Unknown user' })
+      .expect(400);
+
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('rejects empty or whitespace-only content with 400', async () => {
+    const res = await request(app)
+      .post('/comments?userId=1')
+      .send({ content: '   ' })
+      .expect(400);
+
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('rejects nonexistent parentId with 400', async () => {
+    const res = await request(app)
+      .post('/comments?userId=1')
+      .send({ content: 'Valid content', parentId: 9999 })
+      .expect(400);
+
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('persists: the new comment appears in GET /comments', async () => {
+    const postRes = await request(app)
+      .post('/comments?userId=1')
+      .send({ content: 'Should persist' })
+      .expect(201);
+
+    const getRes = await request(app).get('/comments').expect(200);
+    const found = getRes.body.find((c) => c.id === postRes.body.id);
+    expect(found).toBeDefined();
+    expect(found.content).toBe('Should persist');
+    expect(found.parentId).toBeNull();
+  });
+});
