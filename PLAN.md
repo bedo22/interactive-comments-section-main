@@ -78,7 +78,7 @@ CREATE TABLE votes (
 
 ## 2. Pass 1 — API contract (flat response)
 
-Base URL: `http://localhost:3000`. All requests and responses are JSON. The Acting User's `userId` travels in the request body (not auth headers — see ADR-0001).
+Base URL: `http://localhost:3000`. All requests and responses are JSON. The Acting User's `userId` travels as the **`?userId=` query parameter on every request** — reads and mutations alike (see ADR-0001 for the pickable-identity model and ADR-0005 for why a query param, not the body).
 
 ### `GET /users`
 List all users (for the header user picker).
@@ -92,7 +92,7 @@ List all users (for the header user picker).
 ```
 
 ### `GET /comments?userId=X`
-Returns the **flat** list of all comments (top-level + replies + tombstones), each with its derived score and the Acting User's vote. `userId` is optional; if omitted, `yourVote` is `null` everywhere.
+Returns the **flat** list of all comments (top-level + replies + tombstones), each with its derived score and the Acting User's vote. `userId` is optional; if omitted, `yourVote` is `null` everywhere. Rows return `ORDER BY id ASC` (insertion order ≈ chronological) so the frontend can partition in order without sorting (ADR-0006).
 
 ```json
 [
@@ -122,20 +122,34 @@ Returns the **flat** list of all comments (top-level + replies + tombstones), ea
 
 The frontend calls `buildCommentTree(thisArray)` to get the nested shape for rendering.
 
-### `POST /comments` — create a comment or reply
-Request body:
-```json
-{ "userId": 4, "content": "New comment text", "parentId": null }
-```
-- `parentId: null` → top-level comment.
-- `parentId: <id>` → reply.
-Response: `201 Created` + the created comment row (same shape as one element of `GET /comments`, with `yourVote: null`).
+> **Design note — `avatar` is duplicated per comment row.** Each comment row carries `author` *and* `avatar` *and* `userId`, even though the avatar is a property of the user, not the comment. This is a deliberate choice for Pass 1 simplicity: the frontend gets everything it needs to render a comment from a single `GET /comments` response, with no second fetch and no client-side assembly.
+>
+> **The alternative is a "client-side join":** the API would return comments with only `userId` (no `avatar`), and the frontend would separately fetch `GET /users`, build a `Map` of `userId → avatar`, and look up each comment's avatar while rendering — the same pattern as `buildCommentTree`, applied to users. This avoids the duplication and keeps the API purely normalized, at the cost of a second fetch and one more piece of frontend state to manage.
+>
+> We chose duplication because (a) there are only four users, so the duplicated bytes are trivial; (b) a comment row is meaningfully "the author's words + the author's face," so co-locating them is not unnatural; (c) Pass 1 should optimize for clarity, not normalization. **This is a soft call, not an ADR** — if the user count ever grew large, the client-side-join alternative becomes obviously better, and the change is small (drop the `u.avatar AS avatar` from the query, fetch `/users` on the frontend, build the map).
 
-### `POST /comments/:id/vote` — cast or change a vote
+### `POST /comments?userId=X` — create a comment or reply
 Request body:
 ```json
-{ "userId": 4, "value": 1 }
+{ "content": "New comment text", "parentId": null }
 ```
+- `userId` (the author) comes from the query param, not the body (ADR-0005).
+- `parentId: null` → top-level comment.
+- `parentId: <id>` → reply. May point at **any** existing comment regardless of depth — the backend enforces no nesting limit, and the frontend collapses descendants into a single "replies" column (ADR-0006).
+
+**Validation (all → `400`):**
+- Missing or unknown `userId`.
+- Empty / whitespace-only `content` (otherwise `NOT NULL` would throw).
+- `parentId` present but pointing at a nonexistent comment (validate existence explicitly — a reply to a missing comment is a client error, not a 500). **Tombstoned parents are allowed** — you may reply into a thread whose root was soft-deleted.
+
+Response: `201 Created` + the **full comment row** in the same shape as one element of `GET /comments` (id, userId, author, avatar, parentId, content, createdAt, editedAt: null, deletedAt: null, score: 0, yourVote: null). Returning the full row lets the frontend append it to local state without a refetch.
+
+### `POST /comments/:id/vote?userId=X` — cast or change a vote
+Request body:
+```json
+{ "value": 1 }
+```
+- `userId` comes from the query param (ADR-0005).
 - `value` must be `-1` or `1` (CHECK constraint + app validation).
 - Repeating a vote **toggles it off** (deletes the row). Same value again = remove the vote.
 - Opposite value = replace (swing by 2).
@@ -145,20 +159,19 @@ Response: `200 OK`:
 ```
 (`yourVote` is `null` if the vote was toggled off.)
 
-### `PATCH /comments/:id` — edit content
+### `PATCH /comments/:id?userId=X` — edit content
 Request body:
 ```json
-{ "userId": 4, "content": "edited text" }
+{ "content": "edited text" }
 ```
+- `userId` comes from the query param (ADR-0005).
 - Authorization: `userId` must equal the comment's `user_id` AND `deleted_at` must be null. Otherwise `403`.
 - Sets `edited_at` to now on first edit (leave the existing timestamp on subsequent edits).
 Response: `200 OK` + the updated comment row.
 
-### `DELETE /comments/:id` — soft delete (tombstone)
-Request body:
-```json
-{ "userId": 4 }
-```
+### `DELETE /comments/:id?userId=X` — soft delete (tombstone)
+No request body required.
+- `userId` comes from the query param (ADR-0005).
 - Authorization: `userId` must equal the comment's `user_id`. Otherwise `403`.
 - Sets `deleted_at` to now. Row, content, and all descendant replies remain intact.
 Response: `204 No Content`.
@@ -233,7 +246,7 @@ beforeEach(async () => {
 | `comments[].replies[]` | `comments` rows with `parent_id` = parent's id |
 | `replyingTo` | Discarded — derived on the frontend. |
 | `createdAt: "1 month ago"` | Converted to an ISO timestamp (approximate — the original is lossy). |
-| `score` | Not stored directly — represented by inserting that many votes. |
+| `score` | Not stored directly. A handful of explicit demo votes are seeded to exercise the feature, but the fixture's `score` number is NOT reproduced — it is cosmetic display data, and `score` is derived from real votes via `SUM(value)` (ADR-0003). |
 
 **Wrinkle on scores:** each user can only cast one vote per comment (PK constraint). To reach a score of 5 you'd need 5 distinct upvoters, but we only seed 4 users. **Resolution:** don't try to match `data.json` scores exactly. Seed a handful of votes from the real users to demonstrate the feature, and let the scores be whatever they sum to. The exact seed numbers are cosmetic; what matters is that voting *works*.
 
@@ -257,12 +270,15 @@ Goal: feel what Supabase abstracts away by swapping it in for the *same* contrac
 
 Each slice is independently shippable and testable. Do not build the whole backend then the whole frontend — build one slice end-to-end.
 
-1. **Schema + seed + `GET /users` + `GET /comments` (flat).** First integration test: "GET returns the seeded comments with correct scores." Frontend: render the tree read-only.
-2. **`POST /comments` + reply rendering.** Frontend: new comment box + reply box.
+1. **Schema + seed + `GET /users` + `GET /comments` (flat).** First integration test: "GET returns the seeded comments with correct scores." ✅ **Backend done.** ⚠️ **The frontend half of this slice (render the tree read-only) was deferred — it is picked up as stage 2a below.**
+2. **`POST /comments` + reply rendering.** This slice is built in **three staged commits** (full architecture in ADR-0004/0005/0006):
+   - **Stage 2a — React skeleton, read-only (closes slice 1's frontend gap).** Bootstrap Vite (`vite.config.js` with the `/api` proxy, `index.html` at root), add React deps, create `src/main.jsx` + `App.jsx` (owns the flat `comments[]` state + `useEffect` fetch), `src/comments/buildCommentTree.js` (the walk-to-root partitioner, `.js` pure logic) with its own unit test `tests/buildCommentTree.test.js`, `CommentList.jsx` + `CommentThread.jsx` rendering the seeded tree. Run `pnpm dev`, see the seeded comments render, no boxes yet. **No backend changes.**
+   - **Stage 2b — `POST /comments` backend + tests.** Add the route to `server/app.js` (validates `?userId=` exists, content non-empty, `parentId` exists if supplied; returns full row, 201). Add 8 tests in a new `describe('POST /comments')` block in `tests/comments.test.js`: top-level create, reply create, reply-to-reply (proves flat depth), missing userId →400, unknown userId →400, empty content →400, nonexistent parentId →400, persistence (POST then GET finds it). Run `pnpm test`, see 8 new green tests. **No frontend changes.**
+   - **Stage 2c — Wire the two boxes.** Add `src/api/client.js` (fetch helpers appending `?userId=`), `src/context/CurrentUserContext.jsx`, `src/boxes/NewCommentBox.jsx` (top-level, always visible), `src/boxes/ReplyBox.jsx` (per-comment, toggled by a Reply button). Boxes: disable Send on trimmed-empty content, disable + loading while POST in flight, clear + `appendComment(returnedRow)` on 201, no optimistic insert. Type a reply, watch it POST and appear threaded.
 3. **Voting (`POST /comments/:id/vote`).** Frontend: +/- buttons wired to score. Toggle behavior tested.
 4. **Editing (`PATCH /comments/:id`).** Frontend: edit mode toggle.
 5. **Deleting (`DELETE /comments/:id`) + tombstones + delete modal.** Frontend: confirmation modal, tombstone render state.
-6. **User picker in the header.** Authorization (edit/delete only for the author) becomes visible.
+6. **User picker in the header.** Authorization (edit/delete only for the author) becomes visible. Picks the `CurrentUserContext` value.
 7. **Relative-time formatting on the frontend** (can slot in anytime after slice 1).
 
 ---
@@ -270,9 +286,8 @@ Each slice is independently shippable and testable. Do not build the whole backe
 ## 7. ADRs written
 
 - `docs/adr/0001-pickable-identity-without-authentication.md` — the server trusts the stated `userId`; no real auth.
-
-**ADR candidates not yet written** (offer sparingly — these are the two most decision-worthy):
-- **Two-pass architecture** (Pass 1 hand-rolled, Pass 2 Supabase). Hard to reverse, surprising, real tradeoff (double effort vs. learning contrast).
-- **Computed score via live SUM, not a stored column.** Surprising (most apps cache), real tradeoff (perf vs. correctness, discussed at length).
-
-Say the word and I'll record either or both.
+- `docs/adr/0002-two-pass-architecture.md` — Pass 1 hand-rolled (Express + SQLite), Pass 2 swaps to local Supabase against the same contract. Double backend effort traded for learning what Supabase abstracts away.
+- `docs/adr/0003-computed-score-via-live-sum.md` — Score is `SUM(value)` over `votes`, never stored as a column. One source of truth, no drift, scale-irrelevant for this app.
+- `docs/adr/0004-react-frontend-via-vite-proxy.md` — React served by Vite in dev (proxies `/api` → Express on `:3000`) and by Express in prod. Same-origin everywhere, never any CORS, maps directly onto the Pass 2 swap. Includes the frontend state architecture (CurrentUserContext, flat-array source of truth, tree derived per-render) and file layout.
+- `docs/adr/0005-identity-via-query-parameter.md` — `?userId=` on every request, reads and mutations alike. Uniform, trivially removable for Pass 2 auth. Supersedes the original "identity in the body" plan.
+- `docs/adr/0006-flat-replies-with-walk-to-root.md` — `parentId` may point at any existing comment (no depth limit); `buildCommentTree` walks each reply to its root and collapses descendants into a single indented replies column, preserving server `id ASC` order.
