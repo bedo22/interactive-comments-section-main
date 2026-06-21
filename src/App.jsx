@@ -18,11 +18,21 @@ export default function App() {
     setComments((prev) => [...prev, row]);
   }, []);
 
+  const updateVote = useCallback(({ commentId, score, yourVote }) => {
+    setComments((prev) =>
+      prev.map((c) => (c.id === commentId ? { ...c, score, yourVote } : c))
+    );
+  }, []);
+
   const threads = buildCommentTree(comments);
 
   return (
     <div>
-      <CommentList threads={threads} appendComment={appendComment} />
+      <CommentList
+        threads={threads}
+        appendComment={appendComment}
+        updateVote={updateVote}
+      />
       {!userLoading && <NewCommentBox appendComment={appendComment} />}
     </div>
   );

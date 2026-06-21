@@ -330,3 +330,112 @@ describe('POST /comments/:id/vote', () => {
     expect(found.score).toBe(voteRes.body.score);
   });
 });
+
+describe('PATCH /comments/:id', () => {
+  function authorOf(commentId) {
+    return db.prepare('SELECT user_id FROM comments WHERE id = ?').get(commentId).user_id;
+  }
+
+  it('edits own comment and sets editedAt', async () => {
+    const commentId = 1;
+    const userId = authorOf(commentId);
+    const before = db.prepare('SELECT edited_at FROM comments WHERE id = ?').get(commentId);
+    expect(before.edited_at).toBeNull();
+
+    const res = await request(app)
+      .patch(`/comments/${commentId}?userId=${userId}`)
+      .send({ content: 'Edited content' })
+      .expect(200);
+
+    expect(res.body.id).toBe(commentId);
+    expect(res.body.content).toBe('Edited content');
+    expect(res.body.editedAt).not.toBeNull();
+    expect(res.body.deletedAt).toBeNull();
+  });
+
+  it('rejects editing another user\'s comment with 403', async () => {
+    const commentId = 1;
+    const authorId = authorOf(commentId);
+    const otherUserId = [1, 2, 3, 4].find((id) => id !== authorId);
+    const res = await request(app)
+      .patch(`/comments/${commentId}?userId=${otherUserId}`)
+      .send({ content: 'Trying to edit someone else' })
+      .expect(403);
+
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('rejects missing or unknown userId with 403', async () => {
+    const commentId = 1;
+
+    const resMissing = await request(app)
+      .patch(`/comments/${commentId}`)
+      .send({ content: 'No userId' })
+      .expect(403);
+    expect(resMissing.body).toHaveProperty('error');
+
+    const resUnknown = await request(app)
+      .patch(`/comments/${commentId}?userId=999`)
+      .send({ content: 'Unknown user' })
+      .expect(403);
+    expect(resUnknown.body).toHaveProperty('error');
+  });
+
+  it('rejects editing a tombstoned comment with 403', async () => {
+    const commentId = 1;
+    const userId = authorOf(commentId);
+    db.prepare('UPDATE comments SET deleted_at = ? WHERE id = ?')
+      .run(new Date().toISOString(), commentId);
+
+    const res = await request(app)
+      .patch(`/comments/${commentId}?userId=${userId}`)
+      .send({ content: 'Trying to edit a tombstone' })
+      .expect(403);
+
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('rejects empty or whitespace content with 400', async () => {
+    const commentId = 1;
+    const userId = authorOf(commentId);
+
+    const res = await request(app)
+      .patch(`/comments/${commentId}?userId=${userId}`)
+      .send({ content: '   ' })
+      .expect(400);
+
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('rejects editing nonexistent comment with 404', async () => {
+    const res = await request(app)
+      .patch('/comments/9999?userId=1')
+      .send({ content: 'Anything' })
+      .expect(404);
+
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('preserves the original editedAt on a second edit', async () => {
+    const commentId = 1;
+    const userId = authorOf(commentId);
+
+    const first = await request(app)
+      .patch(`/comments/${commentId}?userId=${userId}`)
+      .send({ content: 'First edit' })
+      .expect(200);
+    const firstEditedAt = first.body.editedAt;
+    expect(firstEditedAt).not.toBeNull();
+
+    // Force a different timestamp on the second edit.
+    await new Promise((r) => setTimeout(r, 5));
+
+    const second = await request(app)
+      .patch(`/comments/${commentId}?userId=${userId}`)
+      .send({ content: 'Second edit' })
+      .expect(200);
+
+    expect(second.body.editedAt).toBe(firstEditedAt);
+    expect(second.body.content).toBe('Second edit');
+  });
+});

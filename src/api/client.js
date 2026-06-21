@@ -26,3 +26,17 @@ export async function createComment(userId, { content, parentId }) {
   }
   return res.json();
 }
+
+export async function voteComment(userId, commentId, value) {
+  const res = await fetch(`/api/comments/${commentId}/vote?userId=${userId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `POST /vote failed: ${res.status}`);
+  }
+  return res.json(); // { commentId, score, yourVote }
+}

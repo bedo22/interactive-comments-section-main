@@ -163,6 +163,61 @@ export function createApp(db) {
     res.status(200).json({ commentId, score, yourVote });
   });
 
+  app.patch('/comments/:id', (req, res) => {
+    const rawUserId = req.query.userId;
+    const userId = Number(rawUserId);
+
+    if (!rawUserId || !Number.isInteger(userId) || userId <= 0) {
+      return res.status(403).json({ error: 'Missing or invalid userId' });
+    }
+
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
+    if (!user) {
+      return res.status(403).json({ error: 'Unknown userId' });
+    }
+
+    const commentId = Number(req.params.id);
+    if (!Number.isInteger(commentId) || commentId <= 0) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+    const comment = db.prepare(
+      'SELECT id, user_id, edited_at, deleted_at FROM comments WHERE id = ?'
+    ).get(commentId);
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    if (comment.deleted_at !== null) {
+      return res.status(403).json({ error: 'Cannot edit a deleted comment' });
+    }
+
+    if (comment.user_id !== userId) {
+      return res.status(403).json({ error: 'Not authorized to edit this comment' });
+    }
+
+    const { content } = req.body;
+    if (content == null || typeof content !== 'string' || content.trim().length === 0) {
+      return res.status(400).json({ error: 'Content must be a non-empty string' });
+    }
+
+    const trimmed = content.trim();
+    if (comment.edited_at === null) {
+      db.prepare(
+        'UPDATE comments SET content = ?, edited_at = ? WHERE id = ?'
+      ).run(trimmed, new Date().toISOString(), commentId);
+    } else {
+      db.prepare(
+        'UPDATE comments SET content = ? WHERE id = ?'
+      ).run(trimmed, commentId);
+    }
+
+    const row = queries.commentById.all(userId, commentId)[0];
+    const result = toCamelCase(row);
+    result.yourVote = result.yourVote ?? null;
+
+    res.status(200).json(result);
+  });
+
   return app;
 }
 
