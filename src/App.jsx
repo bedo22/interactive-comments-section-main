@@ -1,21 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { buildCommentTree } from './comments/buildCommentTree';
 import CommentList from './comments/CommentList';
+import NewCommentBox from './boxes/NewCommentBox';
+import { getComments } from './api/client';
+import { useCurrentUser } from './context/CurrentUserContext';
 
 export default function App() {
+  const { user, loading: userLoading } = useCurrentUser();
   const [comments, setComments] = useState([]);
 
   useEffect(() => {
-    fetch('/api/comments')
-      .then((res) => res.json())
-      .then((data) => setComments(data));
+    if (!user) return;
+    getComments(user.id).then(setComments);
+  }, [user]);
+
+  const appendComment = useCallback((row) => {
+    setComments((prev) => [...prev, row]);
   }, []);
 
   const threads = buildCommentTree(comments);
 
   return (
     <div>
-      <CommentList threads={threads} />
+      <CommentList threads={threads} appendComment={appendComment} />
+      {!userLoading && <NewCommentBox appendComment={appendComment} />}
     </div>
   );
 }
