@@ -35,6 +35,12 @@ export function createApp(db) {
       JOIN users u ON u.id = c.user_id
       WHERE c.id = ?
     `),
+    scoreFor: db.prepare(
+      'SELECT COALESCE(SUM(value), 0) AS score FROM votes WHERE comment_id = ?'
+    ),
+    yourVoteFor: db.prepare(
+      'SELECT value FROM votes WHERE user_id = ? AND comment_id = ?'
+    ),
   };
 
   app.get('/comments', (req, res) => {
@@ -105,6 +111,56 @@ export function createApp(db) {
     result.yourVote = null;
 
     res.status(201).json(result);
+  });
+
+  app.post('/comments/:id/vote', (req, res) => {
+    const rawUserId = req.query.userId;
+    const userId = Number(rawUserId);
+
+    if (!rawUserId || !Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ error: 'Missing or invalid userId' });
+    }
+
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
+    if (!user) {
+      return res.status(400).json({ error: 'Unknown userId' });
+    }
+
+    const commentId = Number(req.params.id);
+    if (!Number.isInteger(commentId) || commentId <= 0) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+    const comment = db.prepare('SELECT id FROM comments WHERE id = ?').get(commentId);
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    const { value } = req.body;
+    if (value !== -1 && value !== 1) {
+      return res.status(400).json({ error: 'value must be -1 or 1' });
+    }
+
+    const existing = queries.yourVoteFor.get(userId, commentId);
+
+    if (!existing) {
+      db.prepare(
+        'INSERT INTO votes (user_id, comment_id, value) VALUES (?, ?, ?)'
+      ).run(userId, commentId, value);
+    } else if (existing.value === value) {
+      db.prepare(
+        'DELETE FROM votes WHERE user_id = ? AND comment_id = ?'
+      ).run(userId, commentId);
+    } else {
+      db.prepare(
+        'UPDATE votes SET value = ? WHERE user_id = ? AND comment_id = ?'
+      ).run(value, userId, commentId);
+    }
+
+    const score = queries.scoreFor.get(commentId).score;
+    const remaining = queries.yourVoteFor.get(userId, commentId);
+    const yourVote = remaining ? remaining.value : null;
+
+    res.status(200).json({ commentId, score, yourVote });
   });
 
   return app;

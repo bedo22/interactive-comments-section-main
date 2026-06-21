@@ -195,3 +195,138 @@ describe('POST /comments', () => {
     expect(found.parentId).toBeNull();
   });
 });
+
+describe('POST /comments/:id/vote', () => {
+  function baselineScore(commentId) {
+    return db
+      .prepare('SELECT COALESCE(SUM(value), 0) AS s FROM votes WHERE comment_id = ?')
+      .get(commentId).s;
+  }
+
+  function clearVotes(commentId) {
+    db.prepare('DELETE FROM votes WHERE comment_id = ?').run(commentId);
+  }
+
+  it('upvotes a comment with value=1', async () => {
+    const commentId = 1;
+    clearVotes(commentId);
+    const baseline = baselineScore(commentId);
+
+    const res = await request(app)
+      .post(`/comments/${commentId}/vote?userId=1`)
+      .send({ value: 1 })
+      .expect(200);
+
+    expect(res.body.commentId).toBe(commentId);
+    expect(res.body.yourVote).toBe(1);
+    expect(res.body.score).toBe(baseline + 1);
+  });
+
+  it('downvotes a comment with value=-1', async () => {
+    const commentId = 1;
+    clearVotes(commentId);
+    const baseline = baselineScore(commentId);
+
+    const res = await request(app)
+      .post(`/comments/${commentId}/vote?userId=1`)
+      .send({ value: -1 })
+      .expect(200);
+
+    expect(res.body.yourVote).toBe(-1);
+    expect(res.body.score).toBe(baseline - 1);
+  });
+
+  it('repeating the same value toggles the vote off', async () => {
+    const commentId = 1;
+    clearVotes(commentId);
+    const baseline = baselineScore(commentId);
+
+    await request(app)
+      .post(`/comments/${commentId}/vote?userId=1`)
+      .send({ value: 1 })
+      .expect(200);
+
+    const res = await request(app)
+      .post(`/comments/${commentId}/vote?userId=1`)
+      .send({ value: 1 })
+      .expect(200);
+
+    expect(res.body.yourVote).toBeNull();
+    expect(res.body.score).toBe(baseline);
+  });
+
+  it('opposite value swings the vote by 2', async () => {
+    const commentId = 1;
+    clearVotes(commentId);
+    const baseline = baselineScore(commentId);
+
+    await request(app)
+      .post(`/comments/${commentId}/vote?userId=1`)
+      .send({ value: 1 })
+      .expect(200);
+
+    const afterUp = baselineScore(commentId);
+
+    const res = await request(app)
+      .post(`/comments/${commentId}/vote?userId=1`)
+      .send({ value: -1 })
+      .expect(200);
+
+    expect(res.body.yourVote).toBe(-1);
+    expect(res.body.score).toBe(afterUp - 2);
+  });
+
+  it('rejects missing userId with 400', async () => {
+    const res = await request(app)
+      .post('/comments/1/vote')
+      .send({ value: 1 })
+      .expect(400);
+
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('rejects unknown userId with 400', async () => {
+    const res = await request(app)
+      .post('/comments/1/vote?userId=999')
+      .send({ value: 1 })
+      .expect(400);
+
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('rejects invalid value with 400', async () => {
+    for (const value of [0, 2, 'foo', null]) {
+      const res = await request(app)
+        .post('/comments/1/vote?userId=1')
+        .send({ value })
+        .expect(400);
+      expect(res.body).toHaveProperty('error');
+    }
+  });
+
+  it('rejects vote on nonexistent comment with 404', async () => {
+    const res = await request(app)
+      .post('/comments/9999/vote?userId=1')
+      .send({ value: 1 })
+      .expect(404);
+
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('persists: GET /comments?userId=X reflects the vote in score and yourVote', async () => {
+    const commentId = 1;
+    const userId = 1;
+    clearVotes(commentId);
+
+    const voteRes = await request(app)
+      .post(`/comments/${commentId}/vote?userId=${userId}`)
+      .send({ value: 1 })
+      .expect(200);
+
+    const getRes = await request(app).get(`/comments?userId=${userId}`).expect(200);
+    const found = getRes.body.find((c) => c.id === commentId);
+    expect(found).toBeDefined();
+    expect(found.yourVote).toBe(1);
+    expect(found.score).toBe(voteRes.body.score);
+  });
+});
