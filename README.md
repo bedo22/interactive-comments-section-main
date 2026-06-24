@@ -1,119 +1,291 @@
-# Frontend Mentor - Interactive comments section
+# Interactive Comments Section
 
-![Design preview for the Interactive comments section coding challenge](preview.jpg)
+A full-stack comments widget with unlimited nesting depth, live-scored votes,
+soft-delete tombstones, pickable identity, and a two-pass architecture
+designed to teach what a managed backend abstracts away.
 
-## Welcome! 👋
+## What makes this project different
 
-Thanks for checking out this front-end coding challenge.
+**Architecture-first design.** Every data-model decision was an explicit
+trade-off, debated and documented as ADRs — not defaults. The result is a
+codebase where constraints are intentional, not accidental.
 
-[Frontend Mentor](https://www.frontendmentor.io) challenges help you improve your coding skills by building realistic projects.
+| Decision | What we did | Why it matters |
+|----------|-------------|----------------|
+| Score | Live `SUM(value)` over votes, never cached | Zero drift — no cache to desync |
+| Delete | Soft only — `deleted_at` set, row and children intact | No data loss, thread integrity preserved |
+| Replies | Single `comments` table, `parent_id` points anywhere | Unlimited depth, backend stays simple |
+| Identity | Pickable via `?userId=` query param, no auth | Makes voting and authorization real without dragging in passwords |
+| Timeline | Relative time derived at render, never stored | Storage-format independent of display-format |
+| API shape | Flat array ordered by `id ASC`; frontend builds the tree | Server returns data; client decides presentation |
 
-**To do this challenge, you need a strong understanding of HTML, CSS and JavaScript.**
+**Two-pass architecture.** The frontend is built once. Pass 1 (this project)
+hand-rolls Express + SQLite — every SQL query and handler is written by the
+developer. Pass 2 (planned) swaps to local Supabase against the *same* API
+contract and test suite. The contrast between the two passes *is* the lesson.
 
-## The challenge
+**Contract-gated swap.** The integration test suite passes against Pass 1;
+when it passes unchanged against Pass 2, the swap is verified. Tests that fail
+reveal where Supabase's defaults differ — those differences are the lesson.
 
-Your challenge is to build out this interactive comments section and get it looking as close to the design as possible.
+---
 
-You can use any tools you like to help you complete the challenge. So if you've got something you'd like to practice, feel free to give it a go.
+## Tech stack
 
-We provide the data in a local `data.json` file, so use that to populate the content on the first load. If you want to take it up a notch, feel free to build this as a full-stack CRUD application!
+| Layer | Technology |
+|-------|------------|
+| Backend | Express 5 + better-sqlite3 |
+| Frontend | React 18 + Vite 6 |
+| Testing | Vitest 4 + supertest |
+| Runtime | Node 20+, pnpm |
 
-Your users should be able to:
+## Quick start
 
-- View the optimal layout for the app depending on their device's screen size
-- See hover states for all interactive elements on the page
-- Create, Read, Update, and Delete comments and replies
-- Upvote and downvote comments
-- **Bonus**: If you're building a purely front-end project, use `localStorage` to save the current state in the browser that persists when the browser is refreshed.
-- **Bonus**: Instead of using the `createdAt` strings from the `data.json` file, try using timestamps and dynamically track the time since the comment or reply was posted.
+```bash
+pnpm install
+pnpm dev
+```
 
-### Want some support on the challenge? 
+Opens Vite dev server on `http://localhost:5173`, proxying `/api` to Express
+on `http://localhost:3000`. A `comments.db` file is created and seeded
+automatically on first run.
 
-[Join our community](https://www.frontendmentor.io/community) and ask questions in the **#help** channel.
+## Testing
 
-### Expected behaviour
+```bash
+pnpm test       # run once
+pnpm test:watch # watch mode
+```
 
-- First-level comments should be ordered by their score, whereas nested replies are ordered by time added.
-- Replying to a comment adds the new reply to the bottom of the nested replies within that comment.
-- A confirmation modal should pop up before a comment or reply is deleted.
-- Adding a new comment or reply uses the `currentUser` object from within the `data.json` file.
-- You can only edit or delete your own comments and replies.
+**47 integration tests**, each running against a fresh in-memory SQLite
+database in a `beforeEach` hook — zero state leaks, zero cleanup, zero
+port collisions.
 
-## Where to find everything
+| Area | Tests | What's covered |
+|------|-------|----------------|
+| **Reading** | 8 | Flat array shape, derived fields, score accuracy, yourVote, tombstone inclusion |
+| **Creating** | 7 | Top-level, reply, deep reply, userId validation, content validation, parentId validation, persistence |
+| **Voting** | 8 | Upvote, downvote, toggle, swing, auth validation, value validation, 404, persistence |
+| **Editing** | 8 | Own comment, authorization, tombstoned rejection, content validation, 404, editedAt preservation |
+| **Deleting** | 7 | Own comment, authorization, 404, child survival, missing/unknown userId, idempotency |
+| **Users** | 1 | Returns all 4 seeded users |
 
-Your task is to build out the project to the designs inside the `/design` folder. You will find both a mobile and a desktop version of the design.
+Unit tests for `buildCommentTree` (7 tests) cover the walk-to-root
+partitioner.
 
-The designs are in JPG static format. Using JPGs will mean that you'll need to use your best judgment for styles such as `font-size`, `padding` and `margin`.
+---
 
-If you would like the Figma design file to inspect the design in more detail, you can [subscribe as a PRO member](https://www.frontendmentor.io/pro).
+## Architecture
 
-You will find all the required assets in the `/images` folder. The assets are already optimized.
+### Database
 
-There is also a `style-guide.md` file containing the information you'll need, such as color palette and fonts.
+Three tables, one file (`comments.db`):
 
-## Using AI coding assistants
+```
+┌─────────┐     ┌──────────────┐     ┌───────────┐
+│  users  │     │   comments   │     │   votes   │
+├─────────┤     ├──────────────┤     ├───────────┤
+│ id      │──┐  │ id           │──┐  │ user_id   │──┐
+│ username│  │  │ user_id      │  │  │ comment_id│  │
+│ avatar  │  │  │ parent_id    │──┘  │ value     │  │
+└─────────┘  │  │ content      │     │ (+1 / -1) │  │
+             │  │ created_at   │     └───────────┘  │
+             └──│ edited_at    │                    │
+                │ deleted_at   │────────────────────┘
+                └──────────────┘
+```
 
-We've included two files to help you if you're using AI coding assistants (like Claude, GitHub Copilot, Cursor, etc.) while working on this challenge:
+Key modeling decisions:
 
-- `AGENTS.md` - Contains detailed instructions for AI assistants on how to help you with this challenge. It's tailored to this challenge's difficulty level, so the AI will provide guidance appropriate to your learning stage—offering more support for beginner challenges and encouraging more independence on advanced ones.
-- `CLAUDE.md` - A pointer file that directs Claude-based tools to the AGENTS.md instructions.
+- **A Reply is a Comment.** One table for both top-level comments and replies.
+  `parent_id = NULL` means top-level; any non-null value means it's a reply.
+  No separate table, no special Reply type — the only difference is a column
+  value.
 
-**How to use them:** You don't need to do anything! These files are automatically detected by most AI coding tools. The AI will read them and adjust its behavior to be a better learning partner—guiding you toward solutions rather than just giving you the answers.
+- **Score is computed, never stored.** The `comments` table has no `score`
+  column. Every read runs `SELECT SUM(value) FROM votes WHERE comment_id = ?`.
+  This is the single source of truth — no cache to drift, no transaction to
+  sync, and at this scale (~10 votes per comment) it's ~50µs per query.
 
-**Note:** These files are designed to help you *learn*, not to do the work for you. The AI is instructed to ask questions, give hints, and explain concepts rather than writing complete solutions.
+- **Delete is soft.** Setting `deleted_at` preserves the row and all
+  descendant replies. Children belong to other users and must never be
+  orphaned; the parent row must never block deletion by surviving children.
+  Tombstones render as `[deleted]` placeholders in the UI, keeping the thread
+  pattern visible.
 
-## Building your project
+- **`replyingTo` is derived, never stored.** The `@username` shown at the
+  start of a reply is looked up from the parent comment's author at render
+  time. No column, no sync, no stale data.
 
-Feel free to use any workflow that you feel comfortable with. Below is a suggested process, but do not feel like you need to follow these steps:
+### API
 
-1. Initialize your project as a public repository on [GitHub](https://github.com/). Creating a repo will make it easier to share your code with the community if you need help. If you're not sure how to do this, [have a read-through of this Try Git resource](https://try.github.io/).
-2. Configure your repository to publish your code to a web address. This will also be useful if you need some help during a challenge as you can share the URL for your project with your repo URL. There are a number of ways to do this, and we provide some recommendations below.
-3. Look through the designs to start planning out how you'll tackle the project. This step is crucial to help you think ahead for CSS classes to create reusable styles.
-4. Before adding any styles, structure your content with HTML. Writing your HTML first can help focus your attention on creating well-structured content.
-5. Write out the base styles for your project, including general content styles, such as `font-family` and `font-size`.
-6. Start adding styles to the top of the page and work down. Only move on to the next section once you're happy you've completed the area you're working on.
+All responses are camelCase JSON. Identity travels as `?userId=` on every
+request (reads and mutations alike). The server trusts the stated identity —
+no passwords, sessions, or tokens.
 
-## Deploying your project
+```
+GET    /users                          → User[]
+GET    /comments?userId=X              → Comment[]
+POST   /comments?userId=X              → Comment (201)
+POST   /comments/:id/vote?userId=X     → { commentId, score, yourVote }
+PATCH  /comments/:id?userId=X          → Comment
+DELETE /comments/:id?userId=X          → 204
+```
 
-As mentioned above, there are many ways to host your project for free. Our recommended hosts are:
+**`GET /comments`** returns a **flat** array, not a tree. Each row carries its
+own `parentId` and the server's `id ASC` order. The frontend runs
+`buildCommentTree()` client-side to group descendants under their root and
+collapse multi-depth chains into a single indented replies column. This means:
 
-- [GitHub Pages](https://pages.github.com/)
-- [Vercel](https://vercel.com/)
-- [Netlify](https://www.netlify.com/)
+- The server has zero tree-building logic
+- The API is embarrassingly cacheable
+- True nested rendering is a frontend-only change away
 
-You can host your site using one of these solutions or any of our other trusted providers. [Read more about our recommended and trusted hosts](https://www.frontendmentor.io/guides/hosting-your-solution).
+### Frontend state architecture
 
-## Create a custom `README.md`
+```
+CurrentUserContext ─── provides ──→ App (flat comments[] state)
+                              │
+                     ┌────────┴────────┐
+                     │                 │
+                buildCommentTree    API calls
+                     │           (appendComment,
+                     │            updateVote,
+                     ▼            updateComment,
+               CommentList         tombstoneComment)
+                     │
+               CommentThread
+              ┌──────┴──────┐
+              │             │
+         ScoreControl    Comment
+                     ┌────┴────┐
+                     │         │
+                Edit Mode   ReplyBox
+                     │
+                ConfirmModal ═══ Delete
+```
 
-We strongly recommend overwriting this `README.md` with a custom one. We've provided a template inside the [`README-template.md`](./README-template.md) file in this starter code.
+The flat `comments` array is the single source of truth in `App`. Every
+mutation (create, edit, vote, delete) maps over it via `useCallback`-wrapped
+setters. The nested tree is derived each render — never stored, never synced.
+This means UI always reflects the latest API state, with no optimistic-update
+bugs.
 
-The template provides a guide for what to add. A custom `README` will help you explain your project and reflect on your learnings. Please feel free to edit our template as much as you like.
+---
 
-Once you've added your information to the template, delete this file and rename the `README-template.md` file to `README.md`. That will make it show up as your repository's README file.
+## Project structure
 
-## Submitting your solution
+```
+server/
+  app.js          Express app factory — all routes,
+│                 validation, parameterized SQL
+│
+├── index.js      Entry point — opens DB, runs schema,
+│                 seeds test data, starts listening
+│
+├── schema.sql    Three CREATE TABLE statements
+│
+├── seed.js       Translates data.json (frontend fixture)
+│                 into SQL rows with real timestamps
+│                 and demo votes
+│
+src/
+  main.jsx        React entry — StrictMode, CurrentUserProvider
+│
+├── App.jsx       Root component, flat comments[] state,
+│                 all mutation callbacks, buildCommentTree
+│
+├── api/
+│   client.js     Fetch helpers — getUsers, getComments,
+│                 createComment, voteComment, editComment,
+│                 deleteComment
+│
+├── boxes/
+│   NewCommentBox Top-level input, always visible
+│   ReplyBox      Per-comment reply input, toggled
+│
+├── comments/
+│   CommentList          Iterates threads, passes props
+│   CommentThread        Root + replies with reply toggle
+│   ScoreControl         [-] score [+] with per-comment
+│                        in-flight state
+│   buildCommentTree.js  Pure function: walk-to-root
+│                        partition, id-ASC order
+│
+├── context/
+│   CurrentUserContext   Provides user, users, setUser, loading
+│
+├── header/
+│   UserPicker           Native <select> — zero custom JS,
+│                        fully accessible
+│
+├── modal/
+│   ConfirmModal         Reusable overlay for delete confirmation
+│
+├── utils/
+│   relativeTime.js      ISO string → "X minutes ago"
+│
+tests/
+  comments.test.js           Backend integration (47 tests)
+  buildCommentTree.test.js   Pure function unit tests (7 tests)
+docs/
+  adr/                       Six recorded decisions
+  prompts/                   Build prompts used in development
+```
 
-Submit your solution on the platform for the rest of the community to see. Follow our ["Complete guide to submitting solutions"](https://www.frontendmentor.io/guides/how-to-submit-solutions) for tips on how to do this.
+---
 
-Remember, if you're looking for feedback on your solution, be sure to ask questions when submitting it. The more specific and detailed you are with your questions, the higher the chance you'll get valuable feedback from the community.
+## Architectural decisions (ADRs)
 
-## Sharing your solution
+Every significant design choice was deliberated and recorded. The six ADRs in
+`docs/adr/` capture the *why* behind each trade-off:
 
-There are multiple places you can share your solution:
+| # | Decision | Key insight |
+|---|----------|-------------|
+| 0001 | Pickable identity without authentication | Smallest step that makes voting real — auth is its own skill, scoped out |
+| 0002 | Two-pass architecture (hand-rolled → Supabase) | Double backend effort traded for learning what Supabase abstracts away |
+| 0003 | Computed score via live SUM | No stored cache = zero drift; toggle/swing are free; scale-irrelevant here |
+| 0004 | React frontend via Vite proxy | Same-origin in dev, same contract in prod, trivially maps to Supabase swap |
+| 0005 | Identity via query parameter | Uniform across all endpoints; trivially removable when real auth arrives |
+| 0006 | Flat replies with walk-to-root | Backend stays simple; true nested rendering is a client-only change |
 
-1. Share your solution page in the **#finished-projects** channel of the [community](https://www.frontendmentor.io/community).
-2. Share on [X (formerly Twitter)](https://x.com/frontendmentor) and mention **@frontendmentor**, including the repo and live URLs in your post. We'd love to take a look at what you've built and help share it around.
-3. Share your solution on [LinkedIn](https://www.linkedin.com/company/frontend-mentor/).
-4. Blog about your experience building your project. Writing about your workflow, technical choices, and talking through your code is a brilliant way to reinforce what you've learned. Great platforms to write on are [dev.to](https://dev.to/), [Hashnode](https://hashnode.com/), and [CodeNewbie](https://community.codenewbie.org/).
+---
 
-We provide templates to help you share your solution once you've submitted it on the platform. Please do edit them and include specific questions when you're looking for feedback.
+## Design philosophy
 
-The more specific you are with your questions the more likely it is that another member of the community will give you feedback.
+This codebase was built with deliberate constraints:
 
-## Got feedback for us?
+**Minimal dependencies.** Express + better-sqlite3 on the backend. React on the
+frontend. Zero utility libraries, zero CSS frameworks. Every line of code
+earns its place — nothing is abstracted "because it might be needed later."
 
-We love receiving feedback! We're always looking to improve our challenges and our platform. So if you have anything you'd like to mention, please email hi[at]frontendmentor[dot]io.
+**Testable by construction.** The Express app factory accepts a `Database`
+instance, so every handler runs against a fresh in-memory database in ~1ms
+setup. No mocks, no stubs, no fixtures — real SQL, real responses, real
+assertions. This is the difference between "unit tests that check the code I
+wrote" and "integration tests that prove the code works."
 
-This challenge is completely free. Please share it with anyone who will find it useful for practice.
+**Contract over implementation.** The frontend knows nothing about SQLite,
+Postgres, or Supabase. It talks to URLs and JSON shapes. This means the
+backend can be replaced entirely and no React component changes. The test
+suite is the contract verification — green on Pass 2 means the swap is
+complete.
 
-**Have fun building!** 🚀
+**Ponytail engineering.** Judicious laziness — a `<select>` over a custom
+dropdown, a 15-line `relativeTime` over a date library, `O(n²)` scans over a
+Map where the data is 10 items. The shortest correct path is the right path.
+
+---
+
+## What's next (Pass 2)
+
+The second pass swaps the backend to local Supabase (Postgres + auto-REST):
+
+1. Run `supabase start` — local Postgres + schema auto-migration
+2. Port the three `CREATE TABLE` statements to Postgres
+3. Supabase auto-generates the REST API — no Express, no handlers
+4. Re-point the frontend data layer to the Supabase client SDK
+5. Run the same 47 tests — green = swap verified
+
+The learning is in the diffs: which tests break reveal where Supabase deviates
+from the hand-rolled contract.

@@ -439,3 +439,71 @@ describe('PATCH /comments/:id', () => {
     expect(second.body.content).toBe('Second edit');
   });
 });
+
+describe('DELETE /comments/:id', () => {
+  function authorOf(commentId) {
+    return db.prepare('SELECT user_id FROM comments WHERE id = ?').get(commentId).user_id;
+  }
+
+  it('deletes own comment and sets deleted_at', async () => {
+    const commentId = 1;
+    const userId = authorOf(commentId);
+    const before = db.prepare('SELECT deleted_at FROM comments WHERE id = ?').get(commentId);
+    expect(before.deleted_at).toBeNull();
+
+    await request(app).delete(`/comments/${commentId}?userId=${userId}`).expect(204);
+
+    const after = db.prepare('SELECT deleted_at FROM comments WHERE id = ?').get(commentId);
+    expect(after.deleted_at).not.toBeNull();
+  });
+
+  it('rejects deleting another user\'s comment with 403', async () => {
+    const commentId = 1;
+    const authorId = authorOf(commentId);
+    const otherUserId = [1, 2, 3, 4].find((id) => id !== authorId);
+
+    const res = await request(app)
+      .delete(`/comments/${commentId}?userId=${otherUserId}`)
+      .expect(403);
+
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('rejects deleting nonexistent comment with 404', async () => {
+    const res = await request(app)
+      .delete('/comments/9999?userId=1')
+      .expect(404);
+
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('succeeds when the comment has replies; children survive', async () => {
+    const userId = authorOf(2);
+    await request(app).delete(`/comments/2?userId=${userId}`).expect(204);
+
+    const getRes = await request(app).get('/comments').expect(200);
+    const childIds = getRes.body.filter((c) => c.parentId === 2).map((c) => c.id);
+    expect(childIds).toEqual([3, 4]);
+  });
+
+  it('rejects missing userId with 403', async () => {
+    const res = await request(app).delete('/comments/1').expect(403);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('rejects unknown userId with 403', async () => {
+    const res = await request(app).delete('/comments/1?userId=999').expect(403);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('is idempotent on already-tombstoned comments', async () => {
+    const commentId = 1;
+    const userId = authorOf(commentId);
+
+    await request(app).delete(`/comments/${commentId}?userId=${userId}`).expect(204);
+    await request(app).delete(`/comments/${commentId}?userId=${userId}`).expect(204);
+
+    const after = db.prepare('SELECT deleted_at FROM comments WHERE id = ?').get(commentId);
+    expect(after.deleted_at).not.toBeNull();
+  });
+});

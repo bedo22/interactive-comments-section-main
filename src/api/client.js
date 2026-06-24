@@ -40,3 +40,28 @@ export async function voteComment(userId, commentId, value) {
   }
   return res.json(); // { commentId, score, yourVote }
 }
+
+export async function editComment(userId, commentId, content) {
+  const res = await fetch(`/api/comments/${commentId}?userId=${userId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `PATCH /comments failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function deleteComment(userId, commentId) {
+  const res = await fetch(`/api/comments/${commentId}?userId=${userId}`, {
+    method: 'DELETE',
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `DELETE /comments failed: ${res.status}`);
+  }
+}

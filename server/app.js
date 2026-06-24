@@ -218,6 +218,40 @@ export function createApp(db) {
     res.status(200).json(result);
   });
 
+  app.delete('/comments/:id', (req, res) => {
+    const rawUserId = req.query.userId;
+    const userId = Number(rawUserId);
+
+    if (!rawUserId || !Number.isInteger(userId) || userId <= 0) {
+      return res.status(403).json({ error: 'Missing or invalid userId' });
+    }
+
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
+    if (!user) {
+      return res.status(403).json({ error: 'Unknown userId' });
+    }
+
+    const commentId = Number(req.params.id);
+    if (!Number.isInteger(commentId) || commentId <= 0) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+    const comment = db.prepare(
+      'SELECT id, user_id FROM comments WHERE id = ?'
+    ).get(commentId);
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    if (comment.user_id !== userId) {
+      return res.status(403).json({ error: 'Not authorized to delete this comment' });
+    }
+
+    db.prepare('UPDATE comments SET deleted_at = ? WHERE id = ?')
+      .run(new Date().toISOString(), commentId);
+
+    res.status(204).end();
+  });
+
   return app;
 }
 
