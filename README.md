@@ -39,6 +39,12 @@ reveal where Supabase's defaults differ — those differences are the lesson.
 | Testing | Vitest 4 + supertest |
 | Runtime | Node 20+, pnpm |
 
+## Live demo
+
+https://interactive-comments-section-u6bx.onrender.com/
+
+> Free-tier Render — spins down after 15 min idle. First load takes ~30s cold start.
+
 ## Quick start
 
 ```bash
