@@ -2,7 +2,7 @@
   "name": "interactive-comments-section-main",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server/index.js",
   "scripts": {
     "dev:server": "node --watch server/index.js",
     "dev:client": "vite",
