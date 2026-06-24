@@ -1,4 +1,8 @@
 import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const toCamelCase = (row) =>
   Object.fromEntries(
@@ -10,9 +14,11 @@ const toCamelCase = (row) =>
 
 export function createApp(db) {
   const app = express();
-  app.use(express.json());
+  const api = express.Router();
 
-  app.get('/users', (_req, res) => {
+  api.use(express.json());
+
+  api.get('/users', (_req, res) => {
     const rows = db.prepare('SELECT id, username, avatar FROM users').all();
     res.json(rows);
   });
@@ -43,7 +49,7 @@ export function createApp(db) {
     ),
   };
 
-  app.get('/comments', (req, res) => {
+  api.get('/comments', (req, res) => {
     const actingUserId = req.query.userId ? Number(req.query.userId) : null;
 
     const rows = db.prepare(`
@@ -72,7 +78,7 @@ export function createApp(db) {
     res.json(result);
   });
 
-  app.post('/comments', (req, res) => {
+  api.post('/comments', (req, res) => {
     const rawUserId = req.query.userId;
     const userId = Number(rawUserId);
 
@@ -113,7 +119,7 @@ export function createApp(db) {
     res.status(201).json(result);
   });
 
-  app.post('/comments/:id/vote', (req, res) => {
+  api.post('/comments/:id/vote', (req, res) => {
     const rawUserId = req.query.userId;
     const userId = Number(rawUserId);
 
@@ -163,7 +169,7 @@ export function createApp(db) {
     res.status(200).json({ commentId, score, yourVote });
   });
 
-  app.patch('/comments/:id', (req, res) => {
+  api.patch('/comments/:id', (req, res) => {
     const rawUserId = req.query.userId;
     const userId = Number(rawUserId);
 
@@ -218,7 +224,7 @@ export function createApp(db) {
     res.status(200).json(result);
   });
 
-  app.delete('/comments/:id', (req, res) => {
+  api.delete('/comments/:id', (req, res) => {
     const rawUserId = req.query.userId;
     const userId = Number(rawUserId);
 
@@ -251,6 +257,20 @@ export function createApp(db) {
 
     res.status(204).end();
   });
+
+  // Dev: API routes at root (Vite proxy strips /api prefix)
+  // Prod: API routes at /api (frontend calls /api/* directly)
+  const apiPrefix = process.env.NODE_ENV === 'production' ? '/api' : '/';
+  app.use(apiPrefix, api);
+
+  // Serve built frontend in production
+  if (process.env.NODE_ENV === 'production') {
+    const distPath = path.resolve(__dirname, '..', 'dist');
+    app.use(express.static(distPath));
+    app.use((_req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
 
   return app;
 }
