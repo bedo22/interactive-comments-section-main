@@ -27,22 +27,19 @@ export default function NewCommentBox({ appendComment }) {
   }
 
   return (
-    <div style={{ border: '1px solid #ccc', padding: '1rem', marginTop: '1rem' }}>
+    <div className="new-comment">
+      {user && <img className="new-comment-avatar" src={user.avatar} alt={user.username} />}
       <textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
         placeholder="Add a comment..."
         disabled={submitting}
         rows={3}
-        style={{ width: '100%', boxSizing: 'border-box' }}
       />
-      <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
-        {error && <span style={{ color: 'red' }}>{error}</span>}
-        <span style={{ flex: 1 }} />
-        <button type="button" onClick={handleSend} disabled={!canSend}>
-          {submitting ? 'Sending...' : 'Send'}
-        </button>
-      </div>
+      {error && <span style={{ color: 'red' }}>{error}</span>}
+      <button className="btn-send" type="button" onClick={handleSend} disabled={!canSend}>
+        {submitting ? 'Sending...' : 'Send'}
+      </button>
     </div>
   );
 }

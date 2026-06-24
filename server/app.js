@@ -252,8 +252,17 @@ export function createApp(db) {
       return res.status(403).json({ error: 'Not authorized to delete this comment' });
     }
 
-    db.prepare('UPDATE comments SET deleted_at = ? WHERE id = ?')
-      .run(new Date().toISOString(), commentId);
+    const hasChildren = db.prepare(
+      'SELECT COUNT(*) AS n FROM comments WHERE parent_id = ?'
+    ).get(commentId).n > 0;
+
+    if (hasChildren) {
+      db.prepare('UPDATE comments SET deleted_at = ? WHERE id = ?')
+        .run(new Date().toISOString(), commentId);
+    } else {
+      db.prepare('DELETE FROM votes WHERE comment_id = ?').run(commentId);
+      db.prepare('DELETE FROM comments WHERE id = ?').run(commentId);
+    }
 
     res.status(204).end();
   });
@@ -265,7 +274,8 @@ export function createApp(db) {
 
   // Serve built frontend in production
   if (process.env.NODE_ENV === 'production') {
-    const distPath = path.resolve(__dirname, '..', 'dist');
+    const root = path.resolve(__dirname, '..');
+    const distPath = path.join(root, 'dist');
     app.use(express.static(distPath));
     app.use((_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

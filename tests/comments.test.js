@@ -445,20 +445,18 @@ describe('DELETE /comments/:id', () => {
     return db.prepare('SELECT user_id FROM comments WHERE id = ?').get(commentId).user_id;
   }
 
-  it('deletes own comment and sets deleted_at', async () => {
+  it('hard-deletes own comment without children', async () => {
     const commentId = 1;
     const userId = authorOf(commentId);
-    const before = db.prepare('SELECT deleted_at FROM comments WHERE id = ?').get(commentId);
-    expect(before.deleted_at).toBeNull();
 
     await request(app).delete(`/comments/${commentId}?userId=${userId}`).expect(204);
 
-    const after = db.prepare('SELECT deleted_at FROM comments WHERE id = ?').get(commentId);
-    expect(after.deleted_at).not.toBeNull();
+    const row = db.prepare('SELECT id FROM comments WHERE id = ?').get(commentId);
+    expect(row).toBeUndefined();
   });
 
   it('rejects deleting another user\'s comment with 403', async () => {
-    const commentId = 1;
+    const commentId = 2;
     const authorId = authorOf(commentId);
     const otherUserId = [1, 2, 3, 4].find((id) => id !== authorId);
 
@@ -497,7 +495,7 @@ describe('DELETE /comments/:id', () => {
   });
 
   it('is idempotent on already-tombstoned comments', async () => {
-    const commentId = 1;
+    const commentId = 2;
     const userId = authorOf(commentId);
 
     await request(app).delete(`/comments/${commentId}?userId=${userId}`).expect(204);

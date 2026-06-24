@@ -2,9 +2,23 @@ import { useState } from 'react';
 import { useCurrentUser } from '../context/CurrentUserContext';
 import { voteComment } from '../api/client';
 
-// Renders the [- score +] cluster for a single comment. Tracks its own
-// in-flight state so voting on one comment doesn't disable controls elsewhere.
-export default function ScoreControl({ comment, updateVote }) {
+function PlusIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 11 11" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6.33 10.896c.137 0 .255-.05.354-.149.1-.1.149-.217.149-.354V7.004h3.315c.136 0 .254-.05.354-.149.099-.1.148-.217.148-.354V5.272a.483.483 0 0 0-.148-.354.483.483 0 0 0-.354-.149H6.833V1.4a.483.483 0 0 0-.149-.354.483.483 0 0 0-.354-.149H4.915a.483.483 0 0 0-.354.149c-.1.1-.149.217-.149.354v3.37H1.08a.483.483 0 0 0-.354.15c-.1.099-.149.217-.149.353v1.23c0 .136.05.254.149.353.1.1.217.149.354.149h3.333v3.39c0 .136.05.254.15.353.098.1.216.149.353.149H6.33Z" fill="currentColor"/>
+    </svg>
+  );
+}
+
+function MinusIcon() {
+  return (
+    <svg width="11" height="3" viewBox="0 0 11 3" xmlns="http://www.w3.org/2000/svg">
+      <path d="M9.256 2.66c.204 0 .38-.056.53-.167.148-.11.222-.243.222-.396V.722c0-.152-.074-.284-.223-.395a.859.859 0 0 0-.53-.167H.76a.859.859 0 0 0-.53.167C.083.437.009.57.009.722v1.375c0 .153.074.285.223.396a.859.859 0 0 0 .53.167h8.495Z" fill="currentColor"/>
+    </svg>
+  );
+}
+
+export default function ScoreControl({ comment, updateVote, className = '' }) {
   const { user } = useCurrentUser();
   const [voting, setVoting] = useState(false);
 
@@ -14,61 +28,32 @@ export default function ScoreControl({ comment, updateVote }) {
     try {
       const result = await voteComment(user.id, comment.id, value);
       updateVote(result);
-    } catch {
-      // Network/server error: leave the score and highlight unchanged.
-      // (Toast/alert UI is a future enhancement; for now we silently no-op.)
-    } finally {
+    } catch { /* silent */ } finally {
       setVoting(false);
     }
   }
 
   return (
-    <div
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '0.5rem',
-        border: '1px solid #ddd',
-        borderRadius: '6px',
-        padding: '0.1rem 0.25rem',
-      }}
-    >
+    <div className={`score-control ${className}`}>
       <button
         type="button"
+        className={`score-control__btn${comment.yourVote === 1 ? ' active' : ''}`}
         onClick={() => handleVote(1)}
         disabled={voting}
         aria-label="Upvote"
-        style={comment.yourVote === 1 ? activeBtnStyle : btnStyle}
       >
-        +
+        <PlusIcon />
       </button>
-      <strong style={{ minWidth: '1.5rem', textAlign: 'center' }}>
-        {comment.score}
-      </strong>
+      <span className="score-control__value">{comment.score}</span>
       <button
         type="button"
+        className={`score-control__btn${comment.yourVote === -1 ? ' active' : ''}`}
         onClick={() => handleVote(-1)}
         disabled={voting}
         aria-label="Downvote"
-        style={comment.yourVote === -1 ? activeBtnStyle : btnStyle}
       >
-        −
+        <MinusIcon />
       </button>
     </div>
   );
 }
-
-const btnStyle = {
-  border: 'none',
-  background: 'transparent',
-  cursor: 'pointer',
-  fontSize: '1rem',
-  padding: '0 0.35rem',
-  lineHeight: 1,
-};
-
-const activeBtnStyle = {
-  ...btnStyle,
-  color: '#635fc7',
-  fontWeight: 700,
-};

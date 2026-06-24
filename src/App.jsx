@@ -29,16 +29,20 @@ export default function App() {
     setComments((prev) => prev.map((c) => (c.id === row.id ? row : c)));
   }, []);
 
-  const tombstoneComment = useCallback((commentId) => {
-    setComments((prev) => prev.map((c) =>
-      c.id === commentId ? { ...c, deletedAt: new Date().toISOString() } : c
-    ));
+  const tombstoneComment = useCallback((commentId, hasChildren) => {
+    if (hasChildren) {
+      setComments((prev) => prev.map((c) =>
+        c.id === commentId ? { ...c, deletedAt: new Date().toISOString() } : c
+      ));
+    } else {
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+    }
   }, []);
 
   const threads = buildCommentTree(comments);
 
   return (
-    <div style={{ maxWidth: '700px', margin: '0 auto', padding: '1rem' }}>
+    <>
       <UserPicker />
       <CommentList
         threads={threads}
@@ -49,6 +53,6 @@ export default function App() {
         tombstoneComment={tombstoneComment}
       />
       {!userLoading && <NewCommentBox appendComment={appendComment} />}
-    </div>
+    </>
   );
 }

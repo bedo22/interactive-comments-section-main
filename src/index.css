@@ -1,0 +1,436 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Rubik', sans-serif;
+  background: hsl(228, 33%, 97%);
+  color: hsl(212, 10%, 45%);
+  font-size: 16px;
+  min-height: 100vh;
+}
+
+#root {
+  max-width: 730px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+/* ── Comment card (desktop) ──────────────────────────── */
+.comment-card {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  gap: 1.25rem;
+}
+
+.comment-card-body { flex: 1; min-width: 0; }
+
+/* ── Header row ──────────────────────────────────────── */
+.comment-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.comment-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.comment-author {
+  font-weight: 500;
+  color: hsl(212, 10%, 45%);
+}
+
+.comment-you-badge {
+  background: hsl(238, 40%, 52%);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  text-transform: lowercase;
+}
+
+.comment-time {
+  color: hsl(212, 10%, 45%);
+}
+
+.comment-edited {
+  color: hsl(212, 10%, 45%);
+  font-style: italic;
+}
+
+/* ── Action buttons ──────────────────────────────────── */
+.comment-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-left: auto;
+  align-items: center;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  padding: 0;
+}
+
+.btn-icon:hover { opacity: 0.7; }
+
+.btn-icon--reply { color: hsl(238, 40%, 52%); }
+.btn-icon--edit { color: hsl(238, 40%, 52%); }
+.btn-icon--delete { color: hsl(358, 79%, 66%); }
+
+.btn-icon img { pointer-events: none; }
+
+/* ── Comment content ─────────────────────────────────── */
+.comment-content {
+  line-height: 1.5;
+  color: hsl(212, 10%, 45%);
+}
+
+.comment-replying-to {
+  color: hsl(238, 40%, 52%);
+  font-weight: 500;
+}
+
+/* ── Score control (desktop: vertical pill) ──────────── */
+.score-control {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  background: hsl(223, 19%, 93%);
+  border-radius: 10px;
+  padding: 0.55rem 0.6rem;
+  min-width: 40px;
+  align-self: flex-start;
+}
+
+.score-control__btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: hsl(238, 40%, 52%);
+  opacity: 0.5;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.score-control__btn:hover { opacity: 1; color: hsl(238, 40%, 52%); }
+.score-control__btn.active { opacity: 1; color: hsl(238, 40%, 52%); }
+.score-control__btn svg { pointer-events: none; display: block; }
+
+.score-control__value {
+  font-weight: 500;
+  font-size: 0.9375rem;
+  color: hsl(223, 19%, 53%);
+  padding: 0.2rem 0;
+  text-align: center;
+  min-width: 1.2rem;
+}
+
+/* ── Footer (mobile only) ────────────────────────────── */
+.comment-footer {
+  display: none;
+}
+
+/* ── Reply box ───────────────────────────────────────── */
+.reply-box {
+  background: white;
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-top: 0.75rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.reply-box textarea,
+.new-comment textarea {
+  flex: 1;
+  border: 1px solid hsl(223, 19%, 93%);
+  border-radius: 8px;
+  padding: 0.75rem 1.25rem;
+  font-family: inherit;
+  font-size: 1rem;
+  color: hsl(212, 10%, 45%);
+  resize: none;
+  min-height: 96px;
+  outline: none;
+}
+
+.reply-box textarea:focus,
+.new-comment textarea:focus {
+  border-color: hsl(238, 40%, 52%);
+}
+
+.btn-send {
+  background: hsl(238, 40%, 52%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  align-self: flex-end;
+}
+
+.btn-send:hover { background: hsl(238, 40%, 62%); }
+.btn-send:active { background: hsl(238, 40%, 42%); }
+.btn-send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── New comment box (bottom) ────────────────────────── */
+.new-comment {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.new-comment-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+/* ── Tombstone (deleted comment) ─────────────────────── */
+.tombstone {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.tombstone-text {
+  font-style: italic;
+  color: hsl(212, 10%, 65%);
+}
+
+/* ── Thread (replies left line) ───────────────────────── */
+.thread-replies {
+  border-left: 2px solid hsl(223, 19%, 93%);
+  margin-left: 2rem;
+  padding-left: 2rem;
+}
+
+/* ── Edit mode ───────────────────────────────────────── */
+.edit-textarea {
+  width: 100%;
+  border: 1px solid hsl(223, 19%, 93%);
+  border-radius: 8px;
+  padding: 0.75rem 1.25rem;
+  font-family: inherit;
+  font-size: 1rem;
+  color: hsl(212, 10%, 45%);
+  resize: none;
+  min-height: 96px;
+  outline: none;
+}
+
+.edit-textarea:focus { border-color: hsl(238, 40%, 52%); }
+
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.btn-update {
+  background: hsl(238, 40%, 52%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1.25rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn-update:hover { background: hsl(238, 40%, 62%); }
+.btn-update:active { background: hsl(238, 40%, 42%); }
+
+.btn-cancel {
+  background: none;
+  border: none;
+  color: hsl(212, 10%, 45%);
+  font-family: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.btn-cancel:hover { color: hsl(212, 10%, 25%); }
+
+/* ── Modal ───────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modal-box {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  max-width: 410px;
+  width: 100%;
+}
+
+.modal-title {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: hsl(212, 10%, 45%);
+  margin-bottom: 0.75rem;
+}
+
+.modal-body {
+  line-height: 1.5;
+  color: hsl(212, 10%, 45%);
+  margin-bottom: 1.5rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.btn-modal-cancel,
+.btn-modal-confirm {
+  flex: 1;
+  border: none;
+  border-radius: 8px;
+  padding: 0.875rem 1rem;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn-modal-cancel {
+  background: hsl(223, 19%, 53%);
+  color: white;
+}
+
+.btn-modal-cancel:hover { background: hsl(223, 19%, 43%); }
+.btn-modal-cancel:active { background: hsl(223, 19%, 33%); }
+
+.btn-modal-confirm {
+  background: hsl(358, 79%, 66%);
+  color: white;
+}
+
+.btn-modal-confirm:hover { background: hsl(358, 79%, 56%); }
+.btn-modal-confirm:active { background: hsl(358, 79%, 46%); }
+
+/* ── User picker ─────────────────────────────────────── */
+.user-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  color: hsl(212, 10%, 45%);
+}
+
+.user-picker select {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid hsl(223, 19%, 93%);
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+
+/* ── Responsive: mobile ──────────────────────────────── */
+@media (max-width: 600px) {
+  #root { padding: 1rem 0.75rem; }
+
+  .comment-card {
+    flex-direction: column;
+    padding: 1.25rem;
+    gap: 0;
+  }
+
+  .comment-header { margin-bottom: 0.5rem; }
+
+  .comment-header .comment-actions { display: none; }
+
+  .comment-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 1rem;
+  }
+
+  .score-desktop { display: none; }
+
+  .score-mobile {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0;
+    background: hsl(223, 19%, 93%);
+    border-radius: 10px;
+    padding: 0.55rem 0.6rem;
+    min-width: auto;
+  }
+
+  .score-mobile .score-control__value {
+    padding: 0 0.6rem;
+  }
+
+  .thread-replies {
+    margin-left: 1rem;
+    padding-left: 1rem;
+  }
+
+  .new-comment {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 1rem;
+  }
+
+  .new-comment-avatar { display: none; }
+
+  .btn-send { align-self: flex-end; }
+
+  .reply-box {
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .reply-box .comment-avatar { display: none; }
+
+  .modal-box { padding: 1.5rem; }
+}

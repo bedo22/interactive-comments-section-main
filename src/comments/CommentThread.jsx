@@ -11,39 +11,44 @@ export default function CommentThread({ thread, comments, appendComment, updateV
   const [replyingTo, setReplyingTo] = useState(null);
 
   return (
-    <div style={{ marginBottom: '1rem', border: '1px solid #ccc', padding: '1rem' }}>
+    <div>
       <Comment
         comment={root}
         flatComments={comments}
-        showReplyButton
         isReplyOpen={replyingTo === root.id}
         onToggleReply={() => setReplyingTo((cur) => (cur === root.id ? null : root.id))}
         appendComment={appendComment}
         updateVote={updateVote}
         updateComment={updateComment}
         tombstoneComment={tombstoneComment}
+        hasChildren={replies.length > 0}
       />
-      <div style={{ marginLeft: '2rem', marginTop: '1rem' }}>
-        {replies.map((reply) => (
-          <Comment
-            key={reply.id}
-            comment={reply}
-            flatComments={comments}
-            showReplyButton
-            isReplyOpen={replyingTo === reply.id}
-            onToggleReply={() => setReplyingTo((cur) => (cur === reply.id ? null : reply.id))}
-            appendComment={appendComment}
-            updateVote={updateVote}
-            updateComment={updateComment}
-            tombstoneComment={tombstoneComment}
-          />
-        ))}
-      </div>
+      {replies.length > 0 && (
+        <div className="thread-replies">
+          {replies.map((reply) => {
+            const replyHasChildren = comments.some((c) => c.parentId === reply.id);
+            return (
+              <Comment
+                key={reply.id}
+                comment={reply}
+                flatComments={comments}
+                isReplyOpen={replyingTo === reply.id}
+                onToggleReply={() => setReplyingTo((cur) => (cur === reply.id ? null : reply.id))}
+                appendComment={appendComment}
+                updateVote={updateVote}
+                updateComment={updateComment}
+                tombstoneComment={tombstoneComment}
+                hasChildren={replyHasChildren}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-function Comment({ comment, flatComments, showReplyButton, isReplyOpen, onToggleReply, appendComment, updateVote, updateComment, tombstoneComment }) {
+function Comment({ comment, flatComments, isReplyOpen, onToggleReply, appendComment, updateVote, updateComment, tombstoneComment, hasChildren }) {
   const { user } = useCurrentUser();
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -56,8 +61,10 @@ function Comment({ comment, flatComments, showReplyButton, isReplyOpen, onToggle
 
   if (comment.deletedAt) {
     return (
-      <div style={{ opacity: 0.5, fontStyle: 'italic', color: '#999', marginBottom: '0.5rem', border: '1px solid #ddd', padding: '0.5rem' }}>
-        <strong>{comment.author}</strong> — <span>[deleted]</span>
+      <div className="tombstone">
+        <p className="tombstone-text">
+          <strong>{comment.author}</strong> — [deleted]
+        </p>
       </div>
     );
   }
@@ -66,10 +73,8 @@ function Comment({ comment, flatComments, showReplyButton, isReplyOpen, onToggle
     setSubmitting(true);
     try {
       await deleteComment(user.id, comment.id);
-      tombstoneComment(comment.id);
-    } catch {
-      // silent
-    } finally {
+      tombstoneComment(comment.id, hasChildren);
+    } catch { /* silent */ } finally {
       setSubmitting(false);
       setDeleting(false);
     }
@@ -83,67 +88,74 @@ function Comment({ comment, flatComments, showReplyButton, isReplyOpen, onToggle
       const row = await editComment(user.id, comment.id, trimmed);
       updateComment(row);
       setEditing(false);
-    } catch {
-      // silent
-    } finally {
+    } catch { /* silent */ } finally {
       setSubmitting(false);
     }
   }
 
-  return (
-    <div style={{ marginBottom: '0.5rem', border: '1px solid #ddd', padding: '0.5rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <strong>{comment.author}</strong>
-          <span style={{ marginLeft: '0.5rem', color: '#666' }}>{relativeTime(comment.createdAt)}</span>
-          {comment.editedAt && <span style={{ marginLeft: '0.5rem', color: '#999', fontStyle: 'italic' }}>(edited)</span>}
-        </div>
-        {isAuthor && (
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button type="button" onClick={() => setEditing(!editing)} disabled={submitting}>
-              Edit
-            </button>
-            <button type="button" onClick={() => setDeleting(true)} disabled={submitting}>
-              Delete
-            </button>
-          </div>
-        )}
-      </div>
-      {editing ? (
-        <div>
-          <textarea
-            value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
-            rows={3}
-            style={{ width: '100%', boxSizing: 'border-box' }}
-          />
-          <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-            <button type="button" onClick={() => { setEditing(false); setEditContent(comment.content); }}>Cancel</button>
-            <button type="button" onClick={handleSaveEdit} disabled={submitting || !editContent.trim()}>
-              {submitting ? 'Saving...' : 'Save'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <p>
-          {replyingTo && <span style={{ color: 'hsl(238, 40%, 52%)', fontWeight: 500 }}>@{replyingTo} </span>}
-          {comment.content}
-        </p>
-      )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.25rem' }}>
-        <ScoreControl comment={comment} updateVote={updateVote} />
-        {showReplyButton && (
-          <button type="button" onClick={onToggleReply}>
-            {isReplyOpen ? 'Cancel' : 'Reply'}
+  function renderActions() {
+    if (isAuthor) {
+      return (
+        <>
+          <button className="btn-icon btn-icon--delete" type="button" onClick={() => setDeleting(true)} disabled={submitting}>
+            <img src="/images/icon-delete.svg" alt="" /> Delete
           </button>
+          <button className="btn-icon btn-icon--edit" type="button" onClick={() => setEditing(!editing)} disabled={submitting}>
+            <img src="/images/icon-edit.svg" alt="" /> Edit
+          </button>
+        </>
+      );
+    }
+    return (
+      <button className="btn-icon btn-icon--reply" type="button" onClick={onToggleReply}>
+        <img src="/images/icon-reply.svg" alt="" /> {isReplyOpen ? 'Cancel' : 'Reply'}
+      </button>
+    );
+  }
+
+  return (
+    <div className="comment-card">
+      <ScoreControl className="score-desktop" comment={comment} updateVote={updateVote} />
+      <div className="comment-card-body">
+        <div className="comment-header">
+          <img className="comment-avatar" src={comment.avatar} alt={comment.author} />
+          <span className="comment-author">{comment.author}</span>
+          {isAuthor && <span className="comment-you-badge">you</span>}
+          <span className="comment-time">{relativeTime(comment.createdAt)}</span>
+          {comment.editedAt && <span className="comment-edited">(edited)</span>}
+          <div className="comment-actions">{renderActions()}</div>
+        </div>
+        {editing ? (
+          <div>
+            <textarea
+              className="edit-textarea"
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              rows={3}
+            />
+            <div className="edit-actions">
+              <button className="btn-cancel" type="button" onClick={() => { setEditing(false); setEditContent(comment.content); }}>Cancel</button>
+              <button className="btn-update" type="button" onClick={handleSaveEdit} disabled={submitting || !editContent.trim()}>
+                {submitting ? 'Saving...' : 'Update'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="comment-content">
+            {replyingTo && <span className="comment-replying-to">@{replyingTo} </span>}
+            {comment.content}
+          </p>
+        )}
+        {isReplyOpen && (
+          <ReplyBox parentId={comment.id} appendComment={appendComment} onClose={onToggleReply} />
         )}
       </div>
-      {isReplyOpen && (
-        <ReplyBox parentId={comment.id} appendComment={appendComment} onClose={onToggleReply} />
-      )}
+      <div className="comment-footer">
+        <ScoreControl className="score-mobile" comment={comment} updateVote={updateVote} />
+        <div className="comment-actions">{renderActions()}</div>
+      </div>
       {deleting && (
         <ConfirmModal
-          message="Delete this comment? This can't be undone."
           onConfirm={handleDelete}
           onCancel={() => setDeleting(false)}
         />

@@ -28,24 +28,18 @@ export default function ReplyBox({ parentId, appendComment, onClose }) {
   }
 
   return (
-    <div style={{ border: '1px solid #ddd', padding: '0.5rem', marginTop: '0.5rem' }}>
+    <div className="reply-box">
+      {user && <img className="comment-avatar" src={user.avatar} alt={user.username} />}
       <textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
         placeholder="Write a reply..."
         disabled={submitting}
         rows={3}
-        style={{ width: '100%', boxSizing: 'border-box' }}
       />
-      <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
-        {error && <span style={{ color: 'red' }}>{error}</span>}
-        <span style={{ flex: 1 }} />
-        {onClose && (
-          <button type="button" onClick={onClose} disabled={submitting} style={{ marginRight: '0.5rem' }}>
-            Cancel
-          </button>
-        )}
-        <button type="button" onClick={handleSend} disabled={!canSend}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+        {error && <span style={{ color: 'red', fontSize: '0.8rem' }}>{error}</span>}
+        <button className="btn-send" type="button" onClick={handleSend} disabled={!canSend}>
           {submitting ? 'Sending...' : 'Reply'}
         </button>
       </div>
